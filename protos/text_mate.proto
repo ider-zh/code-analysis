@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package textMate;
+
+message CodeSource {
+  string scope = 1;
+  string text = 2;
+}
+
+message MateData {
+  string text = 1;
+}
+
+service TextMateService {
+    rpc GetTextMatePlain (CodeSource) returns (MateData);
+}

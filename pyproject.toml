@@ -1,0 +1,27 @@
+[tool.poetry]
+name = "inner-analysis"
+version = "0.1.0"
+description = ""
+authors = ["ider <admin@knogen.cn>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+click = "^8.1.7"
+dictdiffer = "^0.9.0"
+gitpython = "^3.1.41"
+grpcio = "^1.60.1"
+grpcio-tools = "^1.60.1"
+c-formatter-42 = "^0.2.7"
+pymongo = "^4.6.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+
+[[tool.poetry.source]]
+name = "aliyun"
+url = "http://mirrors.aliyun.com/pypi/simple"
+priority = "default"

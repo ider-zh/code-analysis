@@ -1,0 +1,59 @@
+{
+    "func_data": [
+        [
+            "audit_classify_arch",
+            4,
+            43,
+            [],
+            false
+        ],
+        [
+            "audit_classify_syscall",
+            16,
+            253,
+            [],
+            false
+        ],
+        [
+            "audit_classes_init",
+            9,
+            315,
+            [
+                "audit_register_class",
+                "audit_register_class",
+                "audit_register_class",
+                "audit_register_class",
+                "audit_register_class"
+            ],
+            true
+        ],
+        [
+            "__initcall",
+            1,
+            31,
+            [],
+            false
+        ]
+    ],
+    "macro_list": [],
+    "global_include": [
+        "asm/unistd.h",
+        "linux/audit.h",
+        "linux/init.h",
+        "linux/types.h",
+        "asm-generic/audit_dir_write.h",
+        "asm-generic/audit_read.h",
+        "asm-generic/audit_write.h",
+        "asm-generic/audit_change_attr.h",
+        "asm-generic/audit_signal.h"
+    ],
+    "local_include": [],
+    "c_name": "audit.c",
+    "file_path": "/mnt/wd01/github/linux_old1/arch/alpha/kernel/audit.c",
+    "my_include_name_list": [
+        "arch/alpha/kernel/audit.c",
+        "alpha/kernel/audit.c",
+        "kernel/audit.c",
+        "audit.c"
+    ]
+}

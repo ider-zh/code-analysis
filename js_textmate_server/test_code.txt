@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * maple_tree.c: Userspace testing for maple tree test-suite
+ * Copyright (c) 2018-2022 Oracle Corporation
+ * Author: Liam R. Howlett <Liam.Howlett@Oracle.com>
+ *
+ * Any tests that require internal knowledge of the tree or threads and other
+ * difficult to handle in kernel tests.
+ */
+
+#define CONFIG_DEBUG_MAPLE_TREE
+#define CONFIG_MAPLE_SEARCH
+#define MAPLE_32BIT (MAPLE_NODE_SLOTS > 31)
+#include "test.h"
+#include <stdlib.h>
+#include <time.h>
+#include "linux/init.h"
+
+#define module_init(x)
+#define module_exit(x)
+#define MODULE_AUTHOR(x)
+#define MODULE_LICENSE(x)
+#define dump_stack()	assert(0)
+
+#include "../../../lib/maple_tree.c"
+#include "../../../lib/test_maple_tree.c"
+
+atomic_t maple_tree_tests_passed;
+#undef MT_BUG_ON
+#define RCU_RANGE_COUNT 1000
+#define RCU_MT_BUG_ON(test, y) {if (y) { test->stop = true; } MT_BUG_ON(test->mt, y); }
+
+extern void apecs_init_arch(void);
+extern void apecs_pci_clr_err(void);
+extern void apecs_machine_check(unsigned long vector, unsigned long la_ptr);
+extern void apecs_pci_tbi(struct pci_controller *, dma_addr_t, dma_addr_t);
+
+static int get_alloc_node_count(struct ma_state *mas)
+{
+	int count = 1;
+	struct maple_alloc *node = mas->alloc;
+
+	if (!node || ((unsigned long)node & 0x1))
+		return 0;
+	while (node->node_count) {
+		count += node->node_count;
+		node = node->slot[0];
+	}
+	return count;
+}
