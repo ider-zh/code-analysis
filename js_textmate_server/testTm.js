@@ -141,7 +141,7 @@ function GetTextMateService(scope,textData, callback) {
 
     // 对 textData，进行预处理
     // Replace single-line comments starting with //
-    const singleLineCommentsRemoved = textData.replace(/\/\/(.*$)/gm, '');
+    const singleLineCommentsRemoved = textData.replace(/\/\/(?![^\r\n]*["'])[^\r\n]*/gm, '');
 
     // Replace multi-line comments /* ... */
     const multiLineCommentsRemoved = singleLineCommentsRemoved.replace(/\/\*[\s\S]*?\*\//g, '');

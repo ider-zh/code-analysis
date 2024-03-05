@@ -8,3 +8,7 @@ import * ，则该 package 下的 class 都+1
 
 ## npm 修改 mirror
 https://juejin.cn/post/7238233943609966652
+
+
+## release
+1. fix js 过滤单行注释的方法， 原来的方法无法 cover awk 的语法， 这次用 gemini 提供的方法interp

@@ -5,28 +5,31 @@ const protoLoader = require('@grpc/proto-loader');
 // const PROTO_PATH = fs.readFileSync(path.resolve(__dirname, './../protos/text_mate.proto'), 'utf8')
 const PROTO_PATH = path.resolve(__dirname, './../protos/text_mate.proto')
 const packageDefinition = protoLoader.loadSync(
-    PROTO_PATH,
-    {
-        keepCase: true,
-        longs: String,
-        enums: String,
-        defaults: true,
-        oneofs: true
-    });
+  PROTO_PATH,
+  {
+    keepCase: true,
+    longs: String,
+    enums: String,
+    defaults: true,
+    oneofs: true
+  });
 
 const ServerAddress = '0.0.0.0:50051'
 
 const textMate_proto = grpc.loadPackageDefinition(packageDefinition).textMate;
 
+async function test() {
+  var client = new textMate_proto.TextMateService(ServerAddress, grpc.credentials.createInsecure());
+
+  client.GetTextMatePlain({ text: "call you", scope: "source.c" }, function (err, response) {
+    // console.log('Greeting:', JSON.parse(response.text), err);
+  });
+}
 
 function main() {
-
-    var client = new textMate_proto.TextMateService(ServerAddress, grpc.credentials.createInsecure());
-  
-    client.GetTextMatePlain({text: "call you", scope:"source.c"}, function(err, response) {
-      console.log('Greeting:', JSON.parse(response.text), err);
-    });
-  
+  for (let i = 1; i < 50; i++) {
+    test()
   }
-  
-  main();
+}
+
+main();

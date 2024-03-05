@@ -5,6 +5,9 @@ dev:
 	poetry run python develop.py
 
 main:
+	poetry run python main.py linux-kernel-history-links
+
+dev_test:
 	poetry run python main.py linux-kernel-test-link
 
 init_protos:
@@ -19,4 +22,5 @@ js_test:
 js_test_tm:
 	cd js_textmate_server;pnpm run test_tm
 
-
+dev_c_42:
+	poetry remove c_formatter_42;poetry add ./submodule/c_formatter_42

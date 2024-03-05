@@ -14,6 +14,10 @@ const vscodeOnigurumaLib = oniguruma.loadWASM(wasmBin).then(() => {
     };
 });
 
+cluster.schedulingPolicy = cluster.SCHED_RR;
+const worker = cluster.worker;
+let workCount = 0
+
 const languageMap = {
     'source.js': 'tmLanguage/JavaScript.tmLanguage.json',
     'source.cpp': 'tmLanguage/cpp.tmLanguage.json',
@@ -43,13 +47,12 @@ const packageDefinition = protoLoader.loadSync(
         oneofs: true
     });
 
-const ServerAddress = '0.0.0.0:50051'
-grpc.max_send_message_length = 20 * 1024 * 1024
-grpc.max_receive_message_length = 20 * 1024 * 1024
+const ServerAddress = '0.0.0.0'
+const BasicPort = 40050
 
 const textMate_proto = grpc.loadPackageDefinition(packageDefinition).textMate;
 
-function containsAll(originArray, includeArrays, excludeArrays=[]) {
+function containsAll(originArray, includeArrays, excludeArrays = []) {
     const allIncluded = includeArrays.every(value => originArray.includes(value));
     if (allIncluded == false)
         return false
@@ -110,6 +113,7 @@ function handleLineTokensC(lineTokens, line) {
         oneline_func: false,
         define: false,
         macro_name: "",
+        punctuation_terminator: false, //行内有中断标记， 此处可以表明函数已经开始或者结束
         ref_func_name_list: [],
         bracket_begin_count: 0,
         bracket_end_count: 0,
@@ -126,21 +130,25 @@ function handleLineTokensC(lineTokens, line) {
         //     `with scopes ${token.scopes.join(', ')}`
         // );
 
-        if (containsAll(token.scopes, ["meta.function.c", "entity.name.function.c"], ["meta.preprocessor.macro.c"])) {
+        if (containsAll(token.scopes, ["meta.function.c", "entity.name.function.c"], ["meta.preprocessor.macro.c", "meta.block.c"])) {
             const func_name = line.substring(token.startIndex, token.endIndex)
             retObj.func_name = func_name
         }
         if (containsAll(token.scopes, ["storage.modifier.c"])) {
-            retObj.func_static = true
+            if ('static' === line.substring(token.startIndex, token.endIndex))
+                retObj.func_static = true
         }
-        if (containsAll(token.scopes, ["keyword.control.directive.define.c","punctuation.definition.directive.c"])) {
+        if (containsAll(token.scopes, ["keyword.control.directive.define.c", "punctuation.definition.directive.c"])) {
             retObj.define = true
         }
         if (containsAll(token.scopes, ["meta.preprocessor.macro.c", "entity.name.function.preprocessor.c"])) {
             const macro_name = line.substring(token.startIndex, token.endIndex)
             retObj.macro_name = macro_name
         }
-        if (containsAll(token.scopes, ["meta.function-call.c", "entity.name.function.c"])) {
+        if (containsAll(token.scopes, ["meta.function-call.c", "entity.name.function.c"]) ||
+            containsAll(token.scopes, ["meta.block.c", "entity.name.function.member.c"]) ||
+            containsAll(token.scopes, ["meta.block.c", "entity.name.function.c"])
+        ) {
             const func_name = line.substring(token.startIndex, token.endIndex)
             retObj.ref_func_name_list.push(func_name)
         }
@@ -151,40 +159,44 @@ function handleLineTokensC(lineTokens, line) {
             retObj.bracket_begin_count += 1
         }
         if (containsAll(token.scopes, ["string.quoted.other.lt-gt.include.c"],
-    ["punctuation.definition.string.begin.c","punctuation.definition.string.end.c"])) {
+            ["punctuation.definition.string.begin.c", "punctuation.definition.string.end.c"])) {
             const func_name = line.substring(token.startIndex, token.endIndex)
             retObj.global_include.push(func_name)
         }
         if (containsAll(token.scopes, ["string.quoted.double.include.c"],
-        ["punctuation.definition.string.begin.c","punctuation.definition.string.end.c"])) {
+            ["punctuation.definition.string.begin.c", "punctuation.definition.string.end.c"])) {
             const func_name = line.substring(token.startIndex, token.endIndex)
             retObj.local_include.push(func_name)
         }
-
-    }
-    if (retObj.func_name !== ""){
-        // 一行函数
-        const token = lineTokens.tokens[lineTokens.tokens.length-1]
         if (containsAll(token.scopes, ["punctuation.terminator.statement.c"])) {
+            retObj.punctuation_terminator = true
+        }
+        
+    }
+    if (retObj.func_name !== "") {
+        // 一行函数, 排除逗号结尾
+        const token = lineTokens.tokens[lineTokens.tokens.length - 1]
+        if (containsAll(token.scopes, ["punctuation.terminator.statement.c"],["punctuation.separator.delimiter.c"])) {
             retObj.oneline_func = true
-        }else if (containsAll(token.scopes, ["punctuation.section.block.end.bracket.curly.c"])) {
+        } else if (containsAll(token.scopes, ["punctuation.section.block.end.bracket.curly.c"],["punctuation.separator.delimiter.c"])) {
             retObj.oneline_func = true
         }
     }
-    
+
     return retObj
 }
 
 
 
-const numCPUs = process.argv[2] || "5";
+const numCPUs = process.argv[2] || "20";
 function GetTextMateService(call, callback) {
+    console.log(`pid:${worker.process.pid} start`)
     let scope = call.request.scope
     let textData = call.request.text
 
     // 对 textData，进行预处理
     // Replace single-line comments starting with //
-    const singleLineCommentsRemoved = textData.replace(/\/\/(.*$)/gm, '');
+    const singleLineCommentsRemoved = textData.replace(/\/\/(?![^\r\n]*["'])[^\r\n]*/gm, '');
 
     // Replace multi-line comments /* ... */
     const multiLineCommentsRemoved = singleLineCommentsRemoved.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -232,7 +244,7 @@ function GetTextMateService(call, callback) {
 
             // 第一次匹配到函数名
             if (func_name === "") {
-                if (lineStats.macro_name !== ""){
+                if (lineStats.macro_name !== "") {
                     // 判断是否是 define, define 不处理 name
                     macro_list.push(lineStats.macro_name)
                 }
@@ -257,7 +269,7 @@ function GetTextMateService(call, callback) {
                 brace_count += (lineStats.bracket_begin_count - lineStats.bracket_end_count)
                 brace_flag = true
             }
-            if ((brace_count === 0 && brace_flag === true && func_name !== "") || lineStats.oneline_func) {
+            if ((brace_count === 0 && (brace_flag === true || lineStats.punctuation_terminator === true) && func_name !== "") || lineStats.oneline_func ) {
                 func_line_count = i - func_start_line + 1
                 func_data.push([func_name,
                     func_line_count,
@@ -278,20 +290,29 @@ function GetTextMateService(call, callback) {
                 ref_func_name_list,
                 func_static])
         }
-        callback(null, { text: JSON.stringify({
-            func_data,
-            macro_list,
-            global_include,
-            local_include
-        }) });
+        callback(null, {
+            text: JSON.stringify({
+                func_data,
+                macro_list,
+                global_include,
+                local_include
+            })
+        });
+        workCount += 1
+        console.log(`pid:${worker.process.pid} end, complete count: ${workCount}`)
     });
+
+
 }
 
-function main() {
-    console.log('start server')
-    var server = new grpc.Server();
+function main(address) {
+    var server = new grpc.Server({
+        'grpc.max_receive_message_length': 100 * 1024 * 1024, //  10MB
+        'grpc.max_send_message_length': 100 * 1024 * 1024 //  10MB
+    });
+    console.log(`${worker.process.pid} start server:${address}`)
     server.addService(textMate_proto.TextMateService.service, { GetTextMatePlain: GetTextMateService });
-    server.bindAsync(ServerAddress, grpc.ServerCredentials.createInsecure(), () => {
+    server.bindAsync(address, grpc.ServerCredentials.createInsecure(), () => {
         server.start();
     });
 }
@@ -300,7 +321,7 @@ function main() {
 if (cluster.isMaster) {
     // Fork workers.
     for (let i = 0; i < Number(numCPUs); i++) {
-        cluster.fork();
+        cluster.fork({ PORT: BasicPort + i });
     }
 
     cluster.on('exit', (worker, code, signal) => {
@@ -309,5 +330,7 @@ if (cluster.isMaster) {
 } else {
     // Workers can share any TCP connection
     // In this case it is an HTTP server
-    main();
+    const port = process.env.PORT;
+
+    main(`${ServerAddress}:${port}`);
 }
