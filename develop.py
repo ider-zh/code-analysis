@@ -19,6 +19,7 @@ file_path = f"tests/data/2024/btf.h"
 file_path = "tests/data/2024/btf_dump.c"
 file_path = "tests/data/2024/audit.h"
 file_path = "tests/data/2024/irq.h"
+file_path = "tests/data/2024/test.c"
 
 # file_path = "/mnt/wd01/github/linux_old1/arch/alpha/kernel/audit.c"
 

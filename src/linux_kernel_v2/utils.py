@@ -44,17 +44,6 @@ def find_h_files(directory):
         #     break
 
 
-def count_file():
-    c_file_count = 0
-    h_file_count = 0
-    for _ in find_c_files(project_source_path):
-        c_file_count += 1
-    for _ in find_h_files(project_source_path):
-        h_file_count += 1
-    logging.info("c file count: %s", c_file_count)
-    logging.info("h file count: %s", h_file_count)
-
-
 def code_str_count(code_list):
     count = 0
     for text in code_list:
@@ -129,6 +118,94 @@ def extract_c_file(file_path, god_path, index):
     result["my_include_name_list"] = path_name_list
 
     return result
+
+
+def common_count_from_start(arr1, arr2):
+    count = 0
+    for i in range(min(len(arr1), len(arr2))):
+        if arr1[i] == arr2[i]:
+            count += 1
+        else:
+            break
+    return count
+
+
+def levenshtein_distance(s1, s2):
+    m, n = len(s1), len(s2)
+
+    # 创建一个 (m+1) x (n+1) 的二维数组
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+    # 初始化第一行和第一列
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+
+    # 计算编辑距离
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if s1[i - 1] == s2[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = 1 + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+
+    return dp[m][n]
+
+
+def find_most_common_parent_super(a: str, b: list[str], include_nam_set: set[str]):
+    """通过 h name 比对，找到最可能的 func, 优先选用 h name, 和 c name 中相同的方法, 用多个选项是， 从路径中判断， 编辑距离允许误差为 3"""
+    ret_rank_set = [set() for _ in range(1 + 3)]
+
+    for c_path in b:
+        c_name = c_path.split("/")[-1].split(".")[0]
+        for include_name in include_nam_set:
+            if (distance_score := levenshtein_distance(c_name, include_name)) <= 2:
+                ret_rank_set[distance_score].add(c_path)
+
+    for collect in ret_rank_set:
+        if len(collect) == 1:
+            return collect
+        if len(collect) > 1:
+            return find_most_common_parent(a, collect)
+
+    return find_most_common_parent(a, b)
+
+
+def find_most_common_parent(a: str, b: list[str]):
+    """
+    找出 b 中和 a 有相同父目录最多的一个路径
+
+    Args:
+    a: 一个路径
+    b: 一组路径
+
+    Returns:
+    b 中和 a 有相同父目录最多的一个路径
+    """
+
+    pa = pathlib.Path(a)
+    path_counts = collections.defaultdict(list)
+    mx = -1
+    for pathB in b:
+        pb = pathlib.Path(pathB).parent
+        count = common_count_from_start(pa.parts, pb.parts)
+        if count >= mx:
+            mx = count
+            path_counts[count].append(pathB)
+
+    # 对于有多个结果的， 选择目录最短的返回
+    if len(path_counts[mx]) == 1:
+        return path_counts[mx]
+    mi = 99
+    path_length = collections.defaultdict(list)
+    for pathB in path_counts[mx]:
+        length = len(pathlib.Path(pathB).parts)
+        if length <= mi:
+            path_length[length].append(pathB)
+            mi = length
+    # 最终返回最长相同路径中最短路径的
+    return path_length[mi]
 
 
 def test():

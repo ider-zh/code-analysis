@@ -5,6 +5,7 @@ const oniguruma = require('vscode-oniguruma');
 const cluster = require('cluster');
 const grpc = require('@grpc/grpc-js');
 const protoLoader = require('@grpc/proto-loader');
+const utils = require('./utils')
 
 const wasmBin = fs.readFileSync(path.join(__dirname, './node_modules/vscode-oniguruma/release/onig.wasm')).buffer;
 const vscodeOnigurumaLib = oniguruma.loadWASM(wasmBin).then(() => {
@@ -171,14 +172,14 @@ function handleLineTokensC(lineTokens, line) {
         if (containsAll(token.scopes, ["punctuation.terminator.statement.c"])) {
             retObj.punctuation_terminator = true
         }
-        
+
     }
     if (retObj.func_name !== "") {
         // 一行函数, 排除逗号结尾
         const token = lineTokens.tokens[lineTokens.tokens.length - 1]
-        if (containsAll(token.scopes, ["punctuation.terminator.statement.c"],["punctuation.separator.delimiter.c"])) {
+        if (containsAll(token.scopes, ["punctuation.terminator.statement.c"], ["punctuation.separator.delimiter.c"])) {
             retObj.oneline_func = true
-        } else if (containsAll(token.scopes, ["punctuation.section.block.end.bracket.curly.c"],["punctuation.separator.delimiter.c"])) {
+        } else if (containsAll(token.scopes, ["punctuation.section.block.end.bracket.curly.c"], ["punctuation.separator.delimiter.c"])) {
             retObj.oneline_func = true
         }
     }
@@ -187,9 +188,8 @@ function handleLineTokensC(lineTokens, line) {
 }
 
 
-
 const numCPUs = process.argv[2] || "20";
-function GetTextMateService(call, callback) {
+async function GetTextMateService(call, callback) {
     console.log(`pid:${worker.process.pid} start`)
     let scope = call.request.scope
     let textData = call.request.text
@@ -203,6 +203,11 @@ function GetTextMateService(call, callback) {
 
     // Replace consecutive empty lines with a single empty line
     const emptyLinesRemoved = multiLineCommentsRemoved.replace(/^[\t ]*\n/gm, '');
+
+
+    // 处理获取 cTage 标记，用来作为函数的断代参考
+    const funcLineMap = await utils.getCTagsHandle(emptyLinesRemoved)
+    // console.log(funcLineMap)
 
     // console.log(emptyLinesRemoved)
 
@@ -228,6 +233,7 @@ function GetTextMateService(call, callback) {
         let ref_func_name_list = []
         let brace_count = 0
         let brace_flag = false
+        let cTagobj = undefined
 
         for (let i = 0; i < text.length; i++) {
             const line = text[i];
@@ -242,11 +248,23 @@ function GetTextMateService(call, callback) {
                     break
             }
 
+            // 获取 ctags 的函数断代
+            const cacheCTagobj = funcLineMap.get(i)
+            if (cacheCTagobj !== undefined)
+                cTagobj = cacheCTagobj
+            if (cTagobj?.endLine < i + 1)
+                cTagobj = undefined
+
             // 第一次匹配到函数名
             if (func_name === "") {
                 if (lineStats.macro_name !== "") {
                     // 判断是否是 define, define 不处理 name
                     macro_list.push(lineStats.macro_name)
+
+                    // 警告
+                    if (cTagobj !== undefined && cTagobj?.funcName !== lineStats.macro_name) {
+                        console.log("ctage 与 tmLanguag macro名不同：", i, cTagobj?.funcName, lineStats.macro_name)
+                    }
                 }
                 else if (lineStats.func_name !== "") {
                     func_name = lineStats.func_name
@@ -256,6 +274,11 @@ function GetTextMateService(call, callback) {
                     ref_func_name_list = []
                     brace_count = 0
                     brace_flag = false
+
+                    // 警告
+                    if (cTagobj !== undefined && cTagobj?.funcName !== lineStats.func_name) {
+                        console.log("ctage 与 tmLanguag 函数名不同：", i+1, cTagobj?.funcName, lineStats.func_name)
+                    }
                 }
             }
             ref_func_name_list.push(...lineStats.ref_func_name_list)
@@ -269,7 +292,12 @@ function GetTextMateService(call, callback) {
                 brace_count += (lineStats.bracket_begin_count - lineStats.bracket_end_count)
                 brace_flag = true
             }
-            if ((brace_count === 0 && (brace_flag === true || lineStats.punctuation_terminator === true) && func_name !== "") || lineStats.oneline_func ) {
+            // cTagobj?.endLine === i+1 强制断代
+            if (
+                (brace_count === 0 && (brace_flag === true || lineStats.punctuation_terminator === true) && func_name !== "") ||
+                lineStats.oneline_func ||
+                (cTagobj?.endLine === i + 1 && cTagobj?.funcName === func_name)
+            ) {
                 func_line_count = i - func_start_line + 1
                 func_data.push([func_name,
                     func_line_count,

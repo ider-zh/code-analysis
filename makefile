@@ -7,6 +7,18 @@ dev:
 main:
 	poetry run python main.py linux-kernel-history-links
 
+main-cache:
+	poetry run python main.py linux-kernel-history-links --usecache true
+
+handle-confuse:
+	poetry run python main.py handle-confuse
+
+main-year:
+	poetry run python main.py linux-kernel-links-years $(EXTRA_ARGS)
+
+kernel-extract:
+	poetry run python main.py linux-kernel-history-extract-cache
+
 dev_test:
 	poetry run python main.py linux-kernel-test-link
 
